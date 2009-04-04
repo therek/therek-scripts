@@ -1,0 +1,158 @@
+#!/usr/bin/perl -w
+#
+# Plugin for watching number of transfers per second issued
+# to the device. A transfer is an I/O request to the device.
+#
+# Usage: Link or copy into /etc/lrrd/client.d/
+#
+# Parameters:
+#
+# 	config   (required)
+# 	autoconf (optional - used by lrrd-config)
+#	reset
+#
+# version 1.1:
+# Fixed problems with negative values, when previous uptime > current uptime
+#
+# version 1.0:
+# First version (the scripts reads from /proc/diskstat only, for now)
+#
+#%# family=auto
+#%# capabilities=autoconf
+
+use strict;
+
+###################
+# global variables
+#
+my $tmpfile = '/tmp/munin-tsp.tmp';
+my $procfile = '/proc/diskstats';
+
+my (%pdev, %cdev, $cuptime, $firstrun);
+
+######################################################
+# subroutines:
+# - read_previous reads previous values from $tmpfile
+# - read_current reads current values from $procfile
+#
+sub read_previous {
+	if (-e $tmpfile) {
+		$firstrun = '0';
+		open (TMP, "$tmpfile") or die "Could not open $tmpfile for reading: $!\n";
+		while (<TMP>) {
+			my($name, $rio, $wio, $uptime) = $_ =~ /^(.+?)\s+(\d+)\s+(\d+)\s+(\d+)$/;
+			$pdev{"$name"} = {
+				rio => $rio,
+				wio => $wio,
+				uptime => $uptime
+			}
+		}
+		close (TMP);
+	} else { $firstrun = '1' }
+}
+
+sub read_current {
+	open (PROC, "$procfile") or die "Could not open $procfile for reading: $!\n";
+	while (<PROC>) {
+		my $count = '0';
+		my @cols = split /\s+/;
+		$count ++ foreach (@cols);
+		my($name, $rio, $wio);
+		($name, $rio, $wio) = $_ =~ /^\s*\d+\s+\d+\s+(.+?)\s+(\d+) \d+ \d+ \d+ (\d+).*$/ if $count == 15;
+		($name, $rio, $wio) = $_ =~ /^\s*\d+\s+\d+\s+(.+?)\s+(\d+) \d+ (\d+).*$/ if $count == 8;
+		next unless ($rio != 0 || $wio != 0);
+		$cdev{"$name"} = {
+			name => $name,
+			rio => $rio,
+			wio => $wio
+		}
+	}
+	close (PROC);
+}
+
+#############################
+# parse command line options
+# - autoconf
+# - config
+# - reset
+#
+if ( $ARGV[0] and $ARGV[0] eq "autoconf") {
+	if (-e "$procfile" ) {
+		print "yes\n";
+		exit 0;
+	}
+	print "no\n";
+	exit 1;
+}
+
+if ( $ARGV[0] and $ARGV[0] eq "reset") {
+	unless (-e $tmpfile ) {
+		print "No need to reset, the $tmpfile does not exists\n";
+		exit 1;
+	}
+	unlink $tmpfile;
+	if (-e $tmpfile) {
+		print "shit! please remove $tmpfile manually\n";
+		exit 1;
+	}
+	print "$tmpfile removed\n";
+	exit 0;
+}
+
+if ( $ARGV[0] and $ARGV[0] eq "config") {
+	&read_current;
+	print "graph_title IO Transfers per Second\n";
+	print "graph_vlabel tps\n";
+	print "graph_category disk\n";
+	print "graph_scale no\n";
+	print "graph_info This graph shows the numer of I/O transfers per second to and from devices.\n";
+	foreach (sort keys %cdev) {
+		my $printkey = $_;    # rrd had problems generating graphs when
+		$printkey =~ s/-/_/g; # the name contained a '-' character
+		print "_dev_$printkey.label $cdev{$_}->{name} \n";
+		print "_dev_$printkey.info tps for $cdev{$_}->{name} \n";
+	}
+	exit 0;
+}
+
+#######################
+# show what you've got
+#
+&read_previous;
+&read_current;
+
+$cuptime=`cat /proc/uptime | cut -d"." -f1`;
+chomp($cuptime);
+
+foreach (sort keys %cdev) {
+	my ($cio, $pio, $upt);
+	if ( $firstrun == '1' || $cuptime < $pdev{$_}->{uptime} ) { # if previous uptime
+		$pio = '0';      # is bigger than current it means that the tempfile has
+		$upt = $cuptime; # not been removed while the system rebooted
+	} else {
+		$pio = $pdev{$_}->{rio} + $pdev{$_}->{wio};
+		$upt = $cuptime - $pdev{$_}->{uptime};
+	}
+	print "pio: $pio upt: $upt\n";
+	$cio = $cdev{$_}->{rio} + $cdev{$_}->{wio};
+	my $tps = ($cio - $pio) / $upt;
+	$tps = $tps * 1.024;
+	my $printkey = $_;    # rrd had problems generating graphs when
+	$printkey =~ s/-/_/g; # the name contained a '-' character
+	printf "_dev_$printkey.value %.2f\n", $tps;
+
+}
+
+###############################################
+# write current values (overwritting previous)
+#
+open (TMP, ">", "$tmpfile") or die "Could not open $tmpfile for writing: $!\n";
+foreach (sort keys %cdev) {
+	print TMP "$_ $cdev{$_}->{rio} $cdev{$_}->{wio} $cuptime\n";
+}
+close (TMP);
+
+# and that's all
+# hopefully this will work on all 2.6 kernels
+#
+# vim:syntax=perl
