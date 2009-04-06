@@ -1,0 +1,47 @@
+#!/usr/local/bin/expect -f
+#
+# (C) 2009 Cezary 'therek' Morga <cm@therek.net>
+#
+
+exp_version -exit 5.0
+
+while {[llength $argv] > 0 } {
+	set flag [lindex $argv 0]
+	switch -- $flag {
+		"--host" {
+			set host [lindex $argv 1]
+			set argv [lrange $argv 2 end]
+		}
+		"--from" {
+			set mail_from [lindex $argv 1]
+			set argv [lrange $argv 2 end]
+		}
+		"--to" {
+			set rcpt_to [lindex $argv 1]
+			set argv [lrange $argv 2 end]
+		}
+		default { break }
+	}
+}
+
+set hostname [ exec hostname -f ]
+set timestamp [ clock format [ clock seconds ] ]
+
+spawn -noecho telnet $host 25
+send_user "Connecting to $host:25\n\n"
+expect "^220*SMTP"
+send "HELO $hostname\n"
+expect "^250 $host"
+send "MAIL FROM: <$mail_from>\n"
+expect "^250*$mail_from"
+send "RCPT TO: <$rcpt_to>\n"
+expect "^250*$rcpt_to"
+send "DATA\n"
+expect "^354 Enter mail"
+send "From: $mail_from\nTo: $rcpt_to\n"
+send "Subject: Test message ($timestamp)\n"
+send "X-Mailer: $argv0\n\n"
+send "This is a test mail.\n.\n"
+expect "^250"
+send "QUIT\n"
+expect "^221"
