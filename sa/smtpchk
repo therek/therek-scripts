@@ -1,4 +1,4 @@
-#!/usr/local/bin/expect -f
+#!/usr/bin/expect -f
 #
 # (C) 2009 Cezary 'therek' Morga <cm@therek.net>
 #
@@ -25,23 +25,26 @@ while {[llength $argv] > 0 } {
 }
 
 set hostname [ exec hostname -f ]
-set timestamp [ clock format [ clock seconds ] ]
+set timestmp [ clock format [ clock seconds ] ]
+set mxhostname [ join [ lrange [ split $host . ] 1 end ] . ]
 
-spawn -noecho telnet $host 25
-send_user "Connecting to $host:25\n\n"
-expect "^220*SMTP"
+#spawn -noecho telnet $host 25
+spawn telnet $host 25
+#send_user "Connecting to $host:25\n\n"
+expect "220*SMTP"
 send "HELO $hostname\n"
-expect "^250 $host"
+expect "250*$mxhostname"
+send_user -- "--> expecting hostname: $mxhostname, am I correct?\n"
 send "MAIL FROM: <$mail_from>\n"
-expect "^250*$mail_from"
+expect "250*$mail_from"
 send "RCPT TO: <$rcpt_to>\n"
-expect "^250*$rcpt_to"
+expect "250*$rcpt_to"
 send "DATA\n"
-expect "^354 Enter mail"
+expect "354 Enter mail"
 send "From: $mail_from\nTo: $rcpt_to\n"
-send "Subject: Test message ($timestamp)\n"
+send "Subject: Test message ($timestmp)\n"
 send "X-Mailer: $argv0\n\n"
 send "This is a test mail.\n.\n"
-expect "^250"
+expect "250"
 send "QUIT\n"
-expect "^221"
+expect "221"
