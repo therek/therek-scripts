@@ -1,4 +1,4 @@
-#!/usr/bin/expect -f
+#!/usr/local/bin/expect -f
 #
 # (C) 2009 Cezary 'therek' Morga <cm@therek.net>
 #
