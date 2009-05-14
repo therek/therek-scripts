@@ -39,10 +39,9 @@ foreach ( @hosts ) {
               'activemq.prefetchSize' => 1
             }
         );
-        # Wait max 5 seconds for message to appear.
-        my $can_read = $stomp->can_read({ timeout => "5" });
-        if ( $can_read ) {
-            # There is a message to collect.
+        my $success_flag = 0;
+	# Iterate through all messages in queue
+        while ( $stomp->can_read({ timeout => "5" }) ) {
             my $frame = $stomp->receive_frame;
             $stomp->ack( { frame => $frame } );
             my $framebody=$frame->body;
@@ -50,13 +49,11 @@ foreach ( @hosts ) {
             if ( $framebody eq "$time" ) {
                 print "OK: Message received\n";
                 $exitcode="ok";
-            }
-            else {
-                print "WARNING: Incorrect message body; is $framebody, should be $time\n";
-                $exitcode="warning";
+                $success_flag = 1;
+                last;
             }
         }
-        else {
+        unless ( $success_flag ) {
             # There's still to message to collect.
             print "CRITICAL: Timed out while trying to collect the message\n";
             $exitcode="critical";
