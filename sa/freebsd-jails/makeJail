@@ -1,0 +1,104 @@
+#!/bin/sh
+
+usage() {
+    echo "usage: ${0##*/} -j <jail_dir> -i <if_name>"
+}
+
+while getopts "i:j:" optionName; do 
+    case "$optionName" in 
+        i) IFACE="$OPTARG";; 
+        j) JDIR="$OPTARG";; 
+        *) usage;; 
+    esac 
+done 
+
+[ -z "$JDIR" ] && usage && exit 0
+[ -z "$IFACE" ] && usage && exit 0
+
+_ip=$(ifconfig $IFACE | awk '$1~/inet/ {print $2}')
+_jail_name=${JDIR##*/}
+_host_name_fqdn=$(hostname -f)
+_host_name=$(hostname -s)
+_rel_path=${0%/*}
+
+checkFile() {
+    _file=$1
+
+    if [ -f $_file ]; then
+        echo "==> $_file exists, not overwritten"
+	_ret=1
+    else
+        _ret=0
+    fi
+
+    return $_ret
+}
+
+# Prepare directories
+_dirs='bin dev etc tmp var var/log var/tmp usr/local'
+for d in $_dirs; do
+    mkdir -p $JDIR/$d
+done
+chmod 1777 $JDIR/tmp
+chmod 1777 $JDIR/var/tmp
+
+# Fill etc dir
+checkFile $JDIR/etc/group && \
+    echo "wheel:*:0:root" > $JDIR/etc/group
+checkFile $JDIR/etc/passwd && \
+    echo "root:*:0:0::/:/nonexistent" > $JDIR/etc/passwd
+checkFile $JDIR/etc/master.passwd && \
+    echo "root:*:0:0::0:0::/:/nonexistent" > $JDIR/etc/master.passwd && \
+    chmod 600 $JDIR/etc/master.passwd && \
+    pwd_mkdb -d $JDIR/etc $JDIR/etc/master.passwd
+checkFile $JDIR/etc/nsswitch.conf && \
+    echo "hosts: files" > $JDIR/etc/nsswitch.conf
+checkFile $JDIR/etc/services && \
+    echo "domain		53/udp	#Domain Name Server" > $JDIR/etc/services
+checkFile "$JDIR/etc/resolv.conf" && \
+    echo -e "domain\tpolsatc\nnameserver\t192.168.81.1\nnameserver\t192.168.81.2" > $JDIR/etc/resolv.conf
+checkFile "$JDIR/etc/hosts" && \
+    echo -e "$_ip\t${_host_name_fqdn}-${_jail_name} ${_host_name}-${_jail_name}\n$_ip\tlocalhost" > $JDIR/etc/hosts
+checkFile "$JDIR/etc/rc" && \
+    echo -e "#!/bin/sh\nPATH=/bin:/usr/bin:/usr/local/bin\n" > $JDIR/etc/rc && \
+    echo -e "/usr/local/bin/supervise /var/service/NAME | /usr/local/bin/supervise /var/service/NAME/log &\n" >> $JDIR/etc/rc
+checkFile "$JDIR/etc/rc.shutdown" && \
+    echo -e "#!/bin/sh\n\nPATH=/bin:/usr/bin:/usr/local/bin\n" > $JDIR/etc/rc.shutdown && \
+    echo -e "/usr/local/bin/svc -d /var/service/NAME\n/usr/local/bin/svc -d /var/service/NAME/log\n" > $JDIR/etc/rc.shutdown
+checkFile "$JDIR/etc/login.conf" && \
+    cp -a /etc/login.conf $JDIR/etc/login.conf && \
+    cp -a /etc/login.conf.db $JDIR/etc/login.conf.db
+checkFile "$JDIR/etc/localtime" && \
+    cp -a /usr/share/zoneinfo/Europe/Warsaw $JDIR/etc/localtime
+
+checkFile "$JDIR/bin/sh" && \
+    cp -a /bin/sh $JDIR/bin && \
+    $_rel_path/lddwalker $JDIR $JDIR/bin/sh
+
+echo "==> Files to fill-in:"
+echo "    $JDIR/etc/hosts (check hostnames)"
+echo "    $JDIR/etc/rc"
+echo "    $JDIR/etc/rc.shutdown"
+
+echo "==> Add to /etc/rc.conf:"
+echo -e "    jail_enable=\"YES\"\n    jail_list=\"${_jail_name}\""
+echo "    jail_${_jail_name}_rootdir=\"$JDIR\""
+echo "    jail_${_jail_name}_hostname=\"${_host_name}-${_jail_name}.polsatc\""
+echo "    jail_${_jail_name}_ip=\"$_ip\""
+echo "    jail_${_jail_name}_devfs_enable=\"YES\""
+echo "    jail_${_jail_name}_ruleset=\"devfs_jail_generic\""
+
+echo "==> Add to /etc/devfs.rules:"
+echo -e "    [devfsrules_hide_all=1]\n    add hide\n"
+echo -e "    [devfs_jail_generic=2]\n    add include \$devfsrules_hide_all"
+echo -e "    add path null unhide\n    add path zero unhide"
+echo -e "    add path random unhide\n    add path urandom unhide"
+
+
+# Sidenotes
+echo "To add groups and users type:"
+echo "pw -V $JDIR/etc groupadd <group> -g <gid>"
+echo "pw -V $JDIR/etc useradd <user> -g <group> -u <uid> -h0 -d /nonexistent -s /nonexistent -c '<name>'"
+
+# eof
+
