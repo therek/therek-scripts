@@ -35,7 +35,7 @@ checkFile() {
 }
 
 # Prepare directories
-_dirs='bin dev etc tmp var var/log var/tmp usr/local'
+_dirs='bin dev etc tmp var var/log var/tmp /var/run usr/local'
 for d in $_dirs; do
     mkdir -p $JDIR/$d
 done
@@ -64,12 +64,14 @@ checkFile "$JDIR/etc/rc" && \
     echo -e "/usr/local/bin/supervise /var/service/NAME | /usr/local/bin/supervise /var/service/NAME/log &\n" >> $JDIR/etc/rc
 checkFile "$JDIR/etc/rc.shutdown" && \
     echo -e "#!/bin/sh\n\nPATH=/bin:/usr/bin:/usr/local/bin\n" > $JDIR/etc/rc.shutdown && \
-    echo -e "/usr/local/bin/svc -d /var/service/NAME\n/usr/local/bin/svc -d /var/service/NAME/log\n" > $JDIR/etc/rc.shutdown
+    echo -e "/usr/local/bin/svc -d /var/service/NAME\n/usr/local/bin/svc -d /var/service/NAME/log\n" >> $JDIR/etc/rc.shutdown
 checkFile "$JDIR/etc/login.conf" && \
     cp -a /etc/login.conf $JDIR/etc/login.conf && \
     cp -a /etc/login.conf.db $JDIR/etc/login.conf.db
 checkFile "$JDIR/etc/localtime" && \
     cp -a /usr/share/zoneinfo/Europe/Warsaw $JDIR/etc/localtime
+checkFile "$JDIR/var/run/ld-elf.so.hints" && \
+    cp -a /var/run/ld-elf.so.hints $JDIR/var/run/ld-elf.so.hints
 
 checkFile "$JDIR/bin/sh" && \
     cp -a /bin/sh $JDIR/bin && \
