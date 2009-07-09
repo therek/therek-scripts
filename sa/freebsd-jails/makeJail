@@ -52,7 +52,7 @@ checkFile $JDIR/etc/master.passwd && \
     chmod 600 $JDIR/etc/master.passwd && \
     pwd_mkdb -d $JDIR/etc $JDIR/etc/master.passwd
 checkFile $JDIR/etc/nsswitch.conf && \
-    echo "hosts: files" > $JDIR/etc/nsswitch.conf
+    echo "hosts: files dns" > $JDIR/etc/nsswitch.conf
 checkFile $JDIR/etc/services && \
     echo "domain		53/udp	#Domain Name Server" > $JDIR/etc/services
 checkFile "$JDIR/etc/resolv.conf" && \
@@ -74,7 +74,6 @@ checkFile "$JDIR/var/run/ld-elf.so.hints" && \
     cp -a /var/run/ld-elf.so.hints $JDIR/var/run/ld-elf.so.hints
 
 checkFile "$JDIR/bin/sh" && \
-    cp -a /bin/sh $JDIR/bin && \
     $_rel_path/lddwalker $JDIR $JDIR/bin/sh
 
 echo "==> Files to fill-in:"
