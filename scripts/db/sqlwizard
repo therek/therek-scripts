@@ -1,0 +1,75 @@
+#!/bin/sh
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+
+####################
+## PRECONFIGURATION
+#
+USER='root'
+PASS=`cat /root/.local.pass.mysql`
+
+MYSQL_BIN='/usr/local/bin/mysql'
+MYSQL_CMD="${MYSQL_BIN} -u ${USER} -p${PASS}"
+
+#############
+## FUNCTIONS
+#
+usage() {
+    echo "usage: ${0##*/} <command> [<params>]"
+    echo ""
+    echo "Available commands:"
+    echo "  engine"
+    echo "  proc"
+    echo ""
+    echo "Type '${0##*/} help <command>' for help on a specific command."
+}
+help() {
+    if [ "x$1" != 'x' ]; then
+        if [ $1 = 'engine' ]; then
+            echo "usage: ${0##*/} engine [<schema>]"
+            echo ""
+            echo "engine: Display engine information for specified schema"
+            echo "        or for all available schemas if none specified."
+        elif [ $1 = 'proc' ]; then
+            echo "usage: ${0##*/} proc sleep"
+            echo ""
+            echo "proc: Display process list in specified state (SLEEP for now)."
+        fi
+    fi
+}
+
+engine() {
+    if [ "x$1" != 'x' ]; then
+        _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
+                  TABLE_NAME AS 'TABLE',
+                  ENGINE AS 'ENGINE'
+              FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = '$1'"
+    else
+        _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
+                  ENGINE AS 'ENGINE'
+              FROM information_schema.TABLES
+              GROUP BY TABLE_SCHEMA"
+    fi
+    $MYSQL_CMD -e "${_sql}"
+}
+proc() {
+    if [ "x$1" != 'x' ]; then
+        if [ $1 = 'sleep' ]; then
+            _sql="SELECT * FROM information_schema.PROCESSLIST where COMMAND = 'Sleep'"
+            $MYSQL_CMD -e "${_sql}"
+        fi
+    fi
+}
+
+########
+## MAIN
+#
+[ $# -eq 0 ] && usage && exit 1
+
+case $1 in
+    "engine") engine $2;;
+    "help")   help $2;;
+    "proc")   proc $2;;
+    *)        usage && exit 1;;
+esac
