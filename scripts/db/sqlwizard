@@ -15,51 +15,68 @@ MYSQL_CMD="${MYSQL_BIN} -u ${USER} -p${PASS}"
 ## FUNCTIONS
 #
 usage() {
-    echo "usage: ${0##*/} <command> [<params>]"
-    echo ""
-    echo "Available commands:"
-    echo "  engine"
-    echo "  proc"
-    echo ""
-    echo "Type '${0##*/} help <command>' for help on a specific command."
+  echo "usage: ${0##*/} <command> [<params>]"
+  echo ""
+  echo "Available commands:"
+  echo "  engine"
+  echo "  processlist"
+  echo ""
+  echo "Type '${0##*/} help <command>' for help on a specific command."
 }
 help() {
-    if [ "x$1" != 'x' ]; then
-        if [ $1 = 'engine' ]; then
-            echo "usage: ${0##*/} engine [<schema>]"
-            echo ""
-            echo "engine: Display engine information for specified schema"
-            echo "        or for all available schemas if none specified."
-        elif [ $1 = 'proc' ]; then
-            echo "usage: ${0##*/} proc sleep"
-            echo ""
-            echo "proc: Display process list in specified state (SLEEP for now)."
-        fi
+  if [ "x$1" != 'x' ]; then
+    if [ $1 = 'engine' ]; then
+      echo "usage: ${0##*/} $1 [<schema>]"
+      echo ""
+      echo "engine: Display engine information for specified schema or for all"
+      echo "        available schemas if none specified."
+    elif [ $1 = 'processlist' ]; then
+      echo "usage: ${0##*/} $1 [state|user] [<params>]"
+      echo ""
+      echo "processlist: Display a list of all processes if no options provided or:"
+      echo "             - processes in given state if keyword 'state' is used;"
+      echo "               available params: binlog, connect, query, sleep"
+      echo "             - processes for given user if keyword 'user' is used."
     fi
+  fi
 }
 
 engine() {
-    if [ "x$1" != 'x' ]; then
-        _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
-                  TABLE_NAME AS 'TABLE',
-                  ENGINE AS 'ENGINE'
-              FROM information_schema.TABLES
-              WHERE TABLE_SCHEMA = '$1'"
-    else
-        _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
-                  ENGINE AS 'ENGINE'
-              FROM information_schema.TABLES
-              GROUP BY TABLE_SCHEMA"
+  if [ "x$1" != 'x' ]; then
+    _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
+            TABLE_NAME AS 'TABLE',
+            ENGINE AS 'ENGINE'
+          FROM information_schema.TABLES
+          WHERE TABLE_SCHEMA = '$1'"
+  else
+    _sql="SELECT TABLE_SCHEMA AS 'SCHEMA',
+            ENGINE AS 'ENGINE'
+          FROM information_schema.TABLES
+          GROUP BY TABLE_SCHEMA"
+  fi
+  $MYSQL_CMD -e "${_sql}"
+}
+processlist() {
+  if [ "x$1" != 'x' ]; then
+    if [ $1 = 'state' ]; then
+      if [ "x$2" != 'x' ]; then
+        if   [ $2 = 'sleep' ]; then
+          _sql="SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND = 'Sleep'"
+        elif [ $2 = 'query' ]; then
+          _sql="SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND = 'Query'"
+        elif [ $2 = 'connect' ]; then
+          _sql="SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND = 'Connect'"
+        elif [ $2 = 'binlog' ]; then
+          _sql="SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND LIKE 'Binlog%'"
+        fi
+      fi
+    elif [ $1 = 'user' ]; then
+      _sql="SELECT * FROM information_schema.PROCESSLIST WHERE USER = '$2'"
     fi
     $MYSQL_CMD -e "${_sql}"
-}
-proc() {
-    if [ "x$1" != 'x' ]; then
-        if [ $1 = 'sleep' ]; then
-            _sql="SELECT * FROM information_schema.PROCESSLIST where COMMAND = 'Sleep'"
-            $MYSQL_CMD -e "${_sql}"
-        fi
-    fi
+  else
+    $MYSQL_CMD -e "SHOW processlist"
+  fi
 }
 
 ########
@@ -68,8 +85,8 @@ proc() {
 [ $# -eq 0 ] && usage && exit 1
 
 case $1 in
-    "engine") engine $2;;
-    "help")   help $2;;
-    "proc")   proc $2;;
-    *)        usage && exit 1;;
+  "engine")       engine $2;;
+  "help")         help $2;;
+  "processlist")  processlist $2 "$3";;
+  *)              usage && exit 1;;
 esac
